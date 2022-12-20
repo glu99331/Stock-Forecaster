@@ -22,7 +22,7 @@ class Stock_Pred():
         auth = tweepy.OAuth1UserHandler(self.api_key, self.api_secret)
         api = tweepy.API(auth, wait_on_rate_limit=True)
         return api    
-    @ratelimit.wrap(limit=180, every=15*60) # 180 reqs every 15 mins    
+    @ratelimit.limits(calls=180, period=15 * 60) # Create a rate limiter for 180 requests every 15 minutes
     def query_tweets_from_n_days(self, n):
         for stock_ticker in self.portfolio:
             if len(self.ticker_to_company_name(stock_ticker).split(" ")) > 1: 
