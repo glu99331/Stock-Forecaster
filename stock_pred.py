@@ -8,6 +8,7 @@ import datetime # To query tweets and generate predictions n days ago
 import yfinance as yf
 import ratelimit # When there are too many requests, this library will help reset the ratelimit
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer # Among the tweets extracted, determine the percentage that are positive, negative, neutral
+import re
 # From internet: For most stock trades, settlement occurs two business days after the day the order executes, or T+2 (trade date plus two days).
 # so to predict, we need a 2-day prediction
 class Stock_Pred():
@@ -44,12 +45,15 @@ class Stock_Pred():
             print(n_days_ago, type(n_days_ago))
             # Use multiple API keys and the "burst" rate limiting strategy to avoid reaching the rate limit
             print("Starting search on Tweets")
+            query = " OR ".join([company, stock_ticker,self.ticker_to_company_name(stock_ticker)])
+            print(query)
+            regex = r'((?<!\w)@[\w+]{1,15}\b)'
             i = 0 # Use a round-robin approach to distribute the requests across the API keys
             while True:
                 api = self.apis[i % len(self.apis)]
                 i+=1
                 # limit to 100 tweets
-                for tweet in tweepy.Cursor(api.search_tweets, q=company, since_id = since_id, max_id = max_id, result_type = "recent").items(100):
+                for tweet in tweepy.Cursor(api.search_tweets, q=query, since_id = since_id, max_id = max_id, result_type = "recent").items(100):
                     tweets.append(tweet)
                     max_id = tweet.id
                     # Convert the created_at attribute from ISO 8601 with TZ to the UTC time zone before comparing
@@ -60,6 +64,17 @@ class Stock_Pred():
                 else:
                     tweet_text = [tweet.text for tweet in tweets]
                     for tweet in tweet_text:
+                        skip_iter = False
+                        matches = re.finditer(regex, tweet, re.MULTILINE)
+                        for match in matches:
+                            concat = '@' + company
+                            concat2 = '@' + stock_ticker
+                            #if twitter handle is like @AppleLUVR ignore, if it is @AAPLMUNCHR also ignore
+                            if ((concat in match.groups() and match.groups() != concat) or (concat2 in match.groups() and match.groups() != concat2)):
+                                skip_iter = True 
+                                break
+                        print(tweet)
+                        if(skip_iter): continue
                         # Now construct polarity map: 
                         # Each company will have a corresponding map that will count the number of tweets that are positive, negative, neutral
                         # Example: {"Negative": 25, "Neutral": 50, "Positive": 25}
