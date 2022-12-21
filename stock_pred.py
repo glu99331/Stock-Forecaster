@@ -42,11 +42,9 @@ class Stock_Pred():
             n_days_ago = datetime.datetime.utcnow() - datetime.timedelta(days=n)
             since_id = int(n_days_ago.timestamp())
             max_id = None
-            print(n_days_ago, type(n_days_ago))
             # Use multiple API keys and the "burst" rate limiting strategy to avoid reaching the rate limit
             print("Starting search on Tweets")
             query = " OR ".join([company, stock_ticker,self.ticker_to_company_name(stock_ticker)])
-            print(query)
             regex = r'((?<!\w)@[\w+]{1,15}\b)'
             i = 0 # Use a round-robin approach to distribute the requests across the API keys
             while True:
@@ -73,7 +71,6 @@ class Stock_Pred():
                             if ((concat in match.groups() and match.groups() != concat) or (concat2 in match.groups() and match.groups() != concat2)):
                                 skip_iter = True 
                                 break
-                        print(tweet)
                         if(skip_iter): continue
                         # Now construct polarity map: 
                         # Each company will have a corresponding map that will count the number of tweets that are positive, negative, neutral
@@ -84,24 +81,27 @@ class Stock_Pred():
                         negative_score = polarity_scores['neg']*100
                         neutral_score = polarity_scores['neu']*100
                         positive_score = polarity_scores['pos']*100
-                        # Add polarity scores into map:
-                        if('negative' not in polarity_map): polarity_map['negative'] = 1
-                        else: polarity_map['negative'] = polarity_map['negative'] + 1 
-                        
-                        if('neutral' not in polarity_map): polarity_map['neutral'] = 1
-                        else: polarity_map['neutral'] = polarity_map['neutral'] + 1 
-                        
-                        if('positive' not in polarity_map): polarity_map['positive'] = 1
-                        else: polarity_map['positive'] = polarity_map['positive'] + 1 
+                        print(negative_score, neutral_score, positive_score)
+                        max_score = max(negative_score, neutral_score, positive_score)
+                    
+                        # Add polarity scores into map based on max_score:
+                        if(max_score == negative_score):
+                            if('negative' not in polarity_map): polarity_map['negative'] = 1
+                            else: polarity_map['negative'] = polarity_map['negative'] + 1 
+                        elif(max_score == neutral_score):
+                            if('neutral' not in polarity_map): polarity_map['neutral'] = 1
+                            else: polarity_map['neutral'] = polarity_map['neutral'] + 1 
+                        elif(max_score == positive_score):
+                            if('positive' not in polarity_map): polarity_map['positive'] = 1
+                            else: polarity_map['positive'] = polarity_map['positive'] + 1 
                     # Now classify company:
                     polarity_type, max_count = 0,0
                     for k,v in polarity_map.items():
                         if(max_count < v): polarity_type, max_count = k,v
                     if (polarity_type == "negative"): self.portfolio_sentiment_map[company] = "Negative"
                     elif(polarity_type == "neutral"): self.portfolio_sentiment_map[company] = "Neutral"
-                    elif(polarity_type == "positive"): self.portfolio_sentiment_map[company] = "Positive"
-                    print
-                    print(f'The map looks like: {self.portfolio_sentiment_map} after adding {company}') # If we reach the end of the tweets, stop searching
+                    elif(polarity_type == "positive"): self.portfolio_sentiment_map[company] = "Positive"                    
+                    print(f'The map looks like: {self.portfolio_sentiment_map} after adding {company}, the polarity map is: {polarity_map}') # If we reach the end of the tweets, stop searching
                     break
     def ticker_to_company_name(self, stock_ticker):
         msft = yf.Ticker(stock_ticker)
