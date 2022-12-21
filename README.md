@@ -7,7 +7,7 @@ This project requires you to use the Twitter API
 1. tweepy
 2. datetime
 3. yfinance
-4. ratelimit
-
+4. ratelimit 
+5. vaderSentiment - For sentiment analysis on each tweet
 ## Note:
 This is a WIP, and is in VERY early development.

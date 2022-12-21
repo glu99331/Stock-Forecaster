@@ -7,7 +7,7 @@ import tweepy # To access Twitter API and search tweets
 import datetime # To query tweets and generate predictions n days ago
 import yfinance as yf
 import ratelimit # When there are too many requests, this library will help reset the ratelimit
-import re
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer # Among the tweets extracted, determine the percentage that are positive, negative, neutral
 # From internet: For most stock trades, settlement occurs two business days after the day the order executes, or T+2 (trade date plus two days).
 # so to predict, we need a 2-day prediction
 class Stock_Pred():
@@ -18,7 +18,8 @@ class Stock_Pred():
         self.portfolio = portfolio
         self.api_map = api_map
         self.apis = self.generate_api()
-    
+        self.sid_obj = SentimentIntensityAnalyzer()
+        self.portfolio_sentiment_map = {}
     def generate_api(self):
         apis = []
         for api_key, api_secret in self.api_map.items():
@@ -29,6 +30,7 @@ class Stock_Pred():
 
     def query_tweets_from_n_days(self, n):
         for stock_ticker in self.portfolio:
+            polarity_map = {}
             if len(self.ticker_to_company_name(stock_ticker).split(" ")) > 1: 
                 company = self.ticker_to_company_name(stock_ticker).split(" ")[0]
             else:
@@ -46,8 +48,8 @@ class Stock_Pred():
             while True:
                 api = self.apis[i % len(self.apis)]
                 i+=1
-                # can limit the number of tweets
-                for tweet in tweepy.Cursor(api.search_tweets, q=company, since_id = since_id, max_id = max_id, result_type = "recent").items():
+                # limit to 100 tweets
+                for tweet in tweepy.Cursor(api.search_tweets, q=company, since_id = since_id, max_id = max_id, result_type = "recent").items(100):
                     tweets.append(tweet)
                     max_id = tweet.id
                     # Convert the created_at attribute from ISO 8601 with TZ to the UTC time zone before comparing
@@ -56,7 +58,35 @@ class Stock_Pred():
 
                     if created_at < n_days_ago: break # If the tweet is older than 5 days, stop searching
                 else:
-                    print(f'The number of tweets containing {company} is {len(tweets)}') # If we reach the end of the tweets, stop searching
+                    tweet_text = [tweet.text for tweet in tweets]
+                    for tweet in tweet_text:
+                        # Now construct polarity map: 
+                        # Each company will have a corresponding map that will count the number of tweets that are positive, negative, neutral
+                        # Example: {"Negative": 25, "Neutral": 50, "Positive": 25}
+                        # We will then determine whether the company was positive, negative, or neutral based on which one, and the map will look like:
+                        # {"Apple": "Negative", ...} 
+                        polarity_scores = self.sid_obj.polarity_scores(tweet)
+                        negative_score = polarity_scores['neg']*100
+                        neutral_score = polarity_scores['neu']*100
+                        positive_score = polarity_scores['pos']*100
+                        # Add polarity scores into map:
+                        if('negative' not in polarity_map): polarity_map['negative'] = 1
+                        else: polarity_map['negative'] = polarity_map['negative'] + 1 
+                        
+                        if('neutral' not in polarity_map): polarity_map['neutral'] = 1
+                        else: polarity_map['neutral'] = polarity_map['neutral'] + 1 
+                        
+                        if('positive' not in polarity_map): polarity_map['positive'] = 1
+                        else: polarity_map['positive'] = polarity_map['positive'] + 1 
+                    # Now classify company:
+                    polarity_type, max_count = 0,0
+                    for k,v in polarity_map.items():
+                        if(max_count < v): polarity_type, max_count = k,v
+                    if (polarity_type == "negative"): self.portfolio_sentiment_map[company] = "Negative"
+                    elif(polarity_type == "neutral"): self.portfolio_sentiment_map[company] = "Neutral"
+                    elif(polarity_type == "positive"): self.portfolio_sentiment_map[company] = "Positive"
+                    print
+                    print(f'The map looks like: {self.portfolio_sentiment_map} after adding {company}') # If we reach the end of the tweets, stop searching
                     break
     def ticker_to_company_name(self, stock_ticker):
         msft = yf.Ticker(stock_ticker)
